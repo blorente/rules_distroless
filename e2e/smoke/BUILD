@@ -3,6 +3,8 @@ load("@container_structure_test//:defs.bzl", "container_structure_test")
 load("@rules_distroless//distroless:defs.bzl", "cacerts", "group", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
 load("@tar.bzl", "tar")
+load("@supply_chain_tools//sbom:sbom.bzl", "sbom")
+load("@supply_chain_tools//sbom:spdx.bzl", "spdx")
 
 COMPATIBLE_WITH = select({
     "@platforms//cpu:x86_64": ["@platforms//cpu:x86_64"],
@@ -129,4 +131,16 @@ container_structure_test(
     }),
     image = ":image_platform",
     target_compatible_with = COMPATIBLE_WITH,
+)
+
+sbom(
+  name = "sbom",
+  target = ":image",
+)
+
+spdx(
+  name = "spdx",
+  sbom = ":sbom",
+  format = "json",
+  out = "sbom.spdx.json",
 )

@@ -14,6 +14,7 @@ load("@rules_cc//cc/private/rules_impl:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_distroless//apt/private:cc_deb_library.bzl", "cc_deb_library")
 load("@bazel_skylib//rules/directory:directory.bzl", "directory")
+load("@package_metadata//:defs.bzl", "package_metadata", "purl")
 
 deb_postfix(
     name = "data",
@@ -49,6 +50,21 @@ directory(
     name = "directory",
     srcs = {symlink_outs} + {outs},
     visibility = ["//visibility:public"]
+)
+
+_purl = (
+  purl.builder()
+    .type("deb")
+    .name("{target_name}") # TODO BL: fix before merging, this is a mangled target name
+    .version("0.0.0") # TODO BL: fix before merging.
+    .build()
+)
+
+package_metadata(
+    name = "package_metadata",
+    purl = _purl,
+    attributes = [],
+    visibility = ["//visibility:public"],
 )
 
 {cc_import_targets}
@@ -478,6 +494,8 @@ def _deb_import_impl(rctx):
         for (symlink, indices) in foreign_symlinks.items()
     }
 
+    purl = "purl"
+
     rctx.file("BUILD.bazel", _DEB_IMPORT_BUILD_TMPL.format(
         mergedusr = rctx.attr.mergedusr,
         depends_on = ["@" + util.sanitize(dep_key) + "//:data" for dep_key in rctx.attr.depends_on],
@@ -486,7 +504,12 @@ def _deb_import_impl(rctx):
         outs = outs,
         foreign_symlinks = foreign_symlinks,
         symlink_outs = symlinks.keys(),
+        purl = purl,
     ))
+
+    rctx.file("REPO.bazel", """
+repo(default_package_metadata = ["//:package_metadata"])
+    """)
 
 deb_import = repository_rule(
     implementation = _deb_import_impl,
