@@ -120,6 +120,33 @@ cc_library(
 )
 """
 
+# The setting that decides whether a generated cc_library keeps its absolute paths.
+_NO_RUNTIME_RPATH = str(Label("//apt:no_runtime_rpath"))
+
+def render_linkopts(linkopts, rpath_linkopts):
+    """The source text for a linkopts attribute.
+
+    Args:
+        linkopts: the options that apply however the build is configured.
+        rpath_linkopts: the `-Wl,-rpath=` options, left out when `//apt:runtime_rpath` is off.
+
+    Returns:
+        A string holding the rendered expression for the linkopts (possibly a `select`).
+    """
+    deduplicated_linkopts = {opt: True for opt in linkopts}.keys()
+    if not rpath_linkopts:
+        return str(deduplicated_linkopts)
+
+    deduplicated_rpaths = {opt: True for opt in rpath_linkopts}.keys()
+    return """{linkopts} + select({{
+      "{runtime_rpath_config}": [],
+      "//conditions:default": {rpaths}
+    }})""".format(
+        linkopts = deduplicated_linkopts,
+        runtime_rpath_config = _NO_RUNTIME_RPATH,
+        rpaths = deduplicated_rpaths,
+    )
+
 def resolve_symlink(target_path, relative_symlink):
     # Split paths into components
     target_parts = target_path.split("/")
@@ -374,7 +401,7 @@ so_library(
                         "external/.." + include: True
                         for include in includes + ["/usr/include", "/usr/include/x86_64-linux-gnu"]
                     }.keys(),
-                    linkopts = pkgc.linkopts,
+                    linkopts = render_linkopts(pkgc.linkopts, pkgc.rpath_linkopts),
                 )
 
         build_file_content += _CC_LIBRARY_TMPL.format(
@@ -382,9 +409,8 @@ so_library(
             hdrs = h_files + hpp_files,
             additional_compiler_inputs = hpp_files_woext,
             additional_linker_inputs = so_files + o_files,
-            linkopts = {
-                opt: True
-                for opt in [
+            linkopts = render_linkopts(
+                [
                     # # Needed for cc_test binaries to locate its dependencies.
                     # "-Wl,-rpath=../{}/{}".format(rctx.attr.name, rpath)
                     # for rp in rpaths
@@ -395,11 +421,12 @@ so_library(
                 ] + [
                     "-L$(BINDIR)/external/{}/{}".format(rctx.attr.name, lp)
                     for lp in link_paths
-                ] + [
+                ] + remap_linkopts,
+                [
                     "-Wl,-rpath=/" + rp
                     for rp in rpaths
-                ] + remap_linkopts
-            }.keys(),
+                ],
+            ),
             direct_deps = import_targets + [":_so_libs"],
             deps = deps,
             strip_include_prefix = None,
@@ -421,23 +448,26 @@ so_library(
             deps = deps,
             additional_compiler_inputs = hpp_files_woext,
             additional_linker_inputs = so_files + o_files,
-            linkopts = [
-                # Required for linker to find .so libraries
-                "-L$(BINDIR)/external/{}/{}".format(rctx.attr.name, rp)
-                for rp in rpaths
-            ] + [
-                # # Required for bazel test binary to find its dependencies.
-                # "-Wl,-rpath=../{}/{}".format(rctx.attr.name, rp)
-                # for rp in rpaths
-            ] + [
-                # Required for ld to validate rpath entries
-                "-Wl,-rpath-link=$(BINDIR)/external/{}/{}".format(rctx.attr.name, rp)
-                for rp in rpaths
-            ] + [
-                # Required for containers to find the dependencies at runtime.
-                "-Wl,-rpath=/" + rp
-                for rp in rpaths
-            ] + remap_linkopts,
+            linkopts = render_linkopts(
+                [
+                    # Required for linker to find .so libraries
+                    "-L$(BINDIR)/external/{}/{}".format(rctx.attr.name, rp)
+                    for rp in rpaths
+                ] + [
+                    # # Required for bazel test binary to find its dependencies.
+                    # "-Wl,-rpath=../{}/{}".format(rctx.attr.name, rp)
+                    # for rp in rpaths
+                ] + [
+                    # Required for ld to validate rpath entries
+                    "-Wl,-rpath-link=$(BINDIR)/external/{}/{}".format(rctx.attr.name, rp)
+                    for rp in rpaths
+                ] + remap_linkopts,
+                [
+                    # Required for containers to find the dependencies at runtime.
+                    "-Wl,-rpath=/" + rp
+                    for rp in rpaths
+                ],
+            ),
             direct_deps = [":_so_libs"],
         )
 

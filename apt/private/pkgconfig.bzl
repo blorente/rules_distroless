@@ -79,6 +79,9 @@ def process_pcconfig(pc):
     if "libdir" in variables:
         libdir = _trim(variables["libdir"])
     linkopts = []
+
+    # Kept apart from `linkopts` so the caller can put them behind a select.
+    rpath_linkopts = []
     includes = []
     link_paths = []
     defines = []
@@ -103,7 +106,7 @@ def process_pcconfig(pc):
                 if not linkpath:
                     continue
                 link_paths.append(linkpath)
-                linkopts.append("-Wl,-rpath=" + arg.removeprefix("-L"))
+                rpath_linkopts.append("-Wl,-rpath=" + linkpath)
                 continue
             elif arg.startswith("-l"):
                 libnames.append("lib" + arg.removeprefix("-l"))
@@ -150,17 +153,18 @@ def process_pcconfig(pc):
             "/usr/include",
         ]
 
-    return (libnames, includedir, libdir, linkopts, link_paths, includes, defines)
+    return (libnames, includedir, libdir, linkopts, rpath_linkopts, link_paths, includes, defines)
 
 def pkgconfig(rctx, path):
     pc = parse_pc(rctx.read(path))
-    (libnames, includedir, libdir, linkopts, link_paths, includes, defines) = process_pcconfig(pc)
+    (libnames, includedir, libdir, linkopts, rpath_linkopts, link_paths, includes, defines) = process_pcconfig(pc)
 
     return struct(
         libnames = libnames,
         includedir = includedir,
         libdir = libdir,
         linkopts = linkopts,
+        rpath_linkopts = rpath_linkopts,
         link_paths = link_paths,
         includes = includes,
         defines = defines,

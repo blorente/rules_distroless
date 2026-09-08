@@ -1,8 +1,23 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 
 exports_files([
     "extensions.bzl",
 ])
+
+# Whether the cc_library generated for an apt package keeps the absolute
+# `-Wl,-rpath=` entry naming each directory the package puts a library in.
+bool_flag(
+    name = "runtime_rpath",
+    build_setting_default = True,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "no_runtime_rpath",
+    flag_values = {":runtime_rpath": "False"},
+    visibility = ["//visibility:public"],
+)
 
 bzl_library(
     name = "defs",
